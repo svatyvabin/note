@@ -1,0 +1,130 @@
+= 使用 SLF4J Logger 库
+:sectnums:
+:icons: font
+:source-highlighter: pygments
+
+== 开始使用
+
+=== 引入依赖
+推荐使用 https://www.slf4j.org/[SLF4J]，SLF4J 只是一个接口，也就是说，还需要绑定其他的 Logger 实现才能使用，但是使用接口的好处是，以后想换 Logger 实现的时候，不需要修改原有的 Logger 代码。
+
+Logger 实现库可以用 https://logback.qos.ch/[Logback]，Maven 引入依赖 `logback-classic` 和 `logback-core` 依赖：
+[source, xml]
+----
+    <dependencies>
+        <dependency>
+            <groupId>org.slf4j</groupId>
+            <artifactId>slf4j-api</artifactId>
+            <version>1.7.22</version>
+        </dependency>
+        <dependency>
+            <groupId>ch.qos.logback</groupId>
+            <artifactId>logback-classic</artifactId>
+            <version>1.1.8</version>
+        </dependency>
+        <dependency>
+            <groupId>ch.qos.logback</groupId>
+            <artifactId>logback-core</artifactId>
+            <version>1.1.8</version>
+        </dependency>
+    </dependencies>
+----
+
+=== 使用 Logger
+最简单的 Logger 程序：
+[source, java]
+----
+import org.slf4j.Logger;
+import static org.slf4j.LoggerFactory.getLogger;
+
+public class LogTest {
+    private static final Logger LOG = getLogger(LogTest.class);
+
+    public static void main(String[] args) {
+        LOG.trace("trace");
+        LOG.debug("debug");
+        LOG.info("info: {}", "hello"); // <1>
+        LOG.warn("warn");
+        LOG.error("error");
+    }
+}
+----
+<1> 用 `{}` 保留字让代码更加简洁
+
+给 IntelliJ IDEA 添加 Live Templates 以便于快速创建 `Logger` 对象：
+[source, java]
+----
+private static final org.slf4j.Logger LOG = org.slf4j.LoggerFactory.getLogger($CLASS_NAME$.class);
+----
+这里使用了完整的包，IntelliJ IDEA 会自动导入。
+添加之后，需要设置一下 `CLASS_NAME` 的公式，设置为 `className()` 即可。
+
+== 多重绑定 Logger 错误
+当你引入了 Logback 后，又引入了其他的 Log 实现（例如 Log4J），就会提示多绑定的错误：
+[source, log]
+----
+SLF4J: Class path contains multiple SLF4J bindings.
+SLF4J: Found binding in [jar:file:/repository/ch/qos/logback/logback-classic/1.1.8/logback-classic-1.1.8.jar!/org/slf4j/impl/StaticLoggerBinder.class]
+SLF4J: Found binding in [jar:file:/repository/org/slf4j/slf4j-log4j12/1.7.24/slf4j-log4j12-1.7.24.jar!/org/slf4j/impl/StaticLoggerBinder.class]
+SLF4J: See http://www.slf4j.org/codes.html#multiple_bindings for an explanation.
+----
+
+解决办法是：
+
+. 先用 Maven 看看整个依赖树，找到哪个库引入了 Log4J 实现：
++
+[source, bash]
+----
+mvn dependency:tree
+----
+
+. 根据 http://www.slf4j.org/codes.html#multiple_bindings[官方文档]，把其他库引入进来的 Log4J 库 exclusion 就行了：
++
+[source, xml]
+----
+<dependencies>
+  <dependency>
+    <groupId> org.apache.cassandra</groupId>
+    <artifactId>cassandra-all</artifactId>
+    <version>0.8.1</version>
+
+    <exclusions>
+      <exclusion> 
+        <groupId>org.slf4j</groupId>
+        <artifactId>slf4j-log4j12</artifactId>
+      </exclusion>
+      <exclusion> 
+        <groupId>log4j</groupId>
+        <artifactId>log4j</artifactId>
+      </exclusion>
+    </exclusions> 
+
+  </dependency>
+</dependencies>
+----
+
+== Logback 配置
+以 Maven 为例，配置文件 logback.xml 在 resources 目录下。
+
+一个简单的配置如下（仅终端输出）：
+[source, xml]
+----
+<configuration>
+    <appender name="STDOUT" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder>
+            <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n</pattern>
+        </encoder>
+    </appender>
+
+    <root level="debug">
+        <appender-ref ref="STDOUT"/>
+    </root>
+</configuration>
+----
+
+=== 输出 JdbcTemplate 的 SQL 语句
+在 logback.xml 配置中添加一行：
+[source, xml]
+----
+<logger name="org.springframework.jdbc.core.JdbcTemplate" level="debug"/>
+----
